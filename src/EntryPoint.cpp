@@ -28,8 +28,9 @@
 #define SET_EDITOR_PATH_OPTION 1
 #define CREATE_PROJECT_OPTION 2
 #define SELECT_PROJECT_OPTION 3
-#define BUILD_PROJECT_OPTION 4
-#define EXIT_OPTION 5
+#define OPEN_PROJECT_OPTION 4
+#define BUILD_PROJECT_OPTION 5
+#define EXIT_OPTION 6
 
 static constexpr size_t s_numberOfFmodLibsPaths(3);
 static const char* s_fmodLibsPaths[s_numberOfFmodLibsPaths]{
@@ -61,7 +62,7 @@ YAML::Node OpenInfosFile()
 	YAML::Node infosNode;
 	try
 	{
-		YAML::Node infos(YAML::LoadFile(INFOS_FILE_NAME));
+		infosNode = YAML::LoadFile(INFOS_FILE_NAME);
 	}
 	catch (const std::exception& e)
 	{
@@ -119,7 +120,9 @@ bool GetDirectoryPath(char* buf, size_t size, const char* fileBrowserTitle)
 			hr = pfd->GetOptions(&dwFlags);
 			if (SUCCEEDED(hr))
 			{
-				hr = pfd->SetTitle(L"Select The Editor Root Directory");
+				wchar_t title[PATH_SIZE];
+				std::mbstowcs(title, fileBrowserTitle, PATH_SIZE);
+				hr = pfd->SetTitle(title);
 				if (SUCCEEDED(hr))
 				{
 					hr = pfd->SetOptions(dwFlags | FOS_PICKFOLDERS);
@@ -174,7 +177,7 @@ bool GetDirectoryPath(char* buf, size_t size, const char* fileBrowserTitle)
 void SetEditorPath()
 {
 	char buf[PATH_SIZE];
-	if (!GetDirectoryPath(buf, PATH_SIZE, "\"Select the editor directory\""))
+	if (!GetDirectoryPath(buf, PATH_SIZE, "Select the editor directory"))
 	{
 		return;
 	}
@@ -329,6 +332,32 @@ void SelectProject(std::string& selectedProject)
 	}
 }
 
+void OpenProject()
+{
+	char projectPath[PATH_SIZE];
+	char projectName[PATH_SIZE];
+	std::cout << "Enter project name: ";
+	std::cin >> projectName;
+	YAML::Node infos(OpenInfosFile());
+	assert(infos[PROJECTS]);
+	if (infos[PROJECTS][projectName])
+	{
+		std::cout << "Fail to open project: project with name " << projectName << " is already added." << std::endl;
+		return;
+	}
+	if (!GetDirectoryPath(projectPath, PATH_SIZE, "Select project root directory"))
+	{
+		return;
+	}
+	infos[PROJECTS].force_insert(projectName, projectPath);
+	std::ofstream stream(INFOS_FILE_NAME, std::ios_base::out, std::ios_base::trunc);
+	assert(stream);
+	stream << infos;
+	assert(stream);
+	stream.close();
+	assert(stream);
+}
+
 void BuildProject(const std::string& selectedProject)
 {
 	if (selectedProject.empty())
@@ -364,13 +393,13 @@ void BuildProject(const std::string& selectedProject)
 	std::filesystem::path projectPath(infos[PROJECTS][selectedProject].as<std::string>());
 	std::filesystem::path runtimeOutputDirectory(projectPath);
 	std::string command("cmake");
-	command.append(" -S ").append(editorPath.string()).append(" -B ").append((projectPath / "build").string());
+	command.append(" -S \"").append(editorPath.string()).append("\"").append(" -B \"").append((projectPath / "build").string()).append("\"");
 	command.append(" -D MAIN_TARGET=DommusEditor");
 	command.append(" -D PROJECT_PATH_DEFINED=ON");
-	command.append(" -D PROJECT_PATH=").append(projectPath.string());
+	command.append(" -D PROJECT_PATH=\"").append(projectPath.string()).append("\"");
 	command.append(" -D CMAKE_BUILD_TYPE=").append(option == 0 ? "Debug" : "Release");
 	command.append(" -D CMAKE_EXPORT_COMPILE_COMMANDS=ON");
-	command.append(" -D CMAKE_RUNTIME_OUTPUT_DIRECTORY=").append(runtimeOutputDirectory.string());
+	command.append(" -D CMAKE_RUNTIME_OUTPUT_DIRECTORY=\"").append(runtimeOutputDirectory.string()).append("\"");
 	int status(system(command.c_str()));
 	if (status != 0)
 	{
@@ -378,7 +407,7 @@ void BuildProject(const std::string& selectedProject)
 		return;
 	}
 	command = "cmake --build ";
-	command.append(projectPath.string()).append("/build");
+	command.append("\"").append(projectPath.string()).append("/build").append("\"");
 	command.append(" -j ").append(std::to_string(std::thread::hardware_concurrency()));
 	status = system(command.c_str());
 	if (status != 0)
@@ -412,14 +441,14 @@ void GenerateSolution(const std::string& selectedProject)
 	std::filesystem::path runtimeOutputDirectory(projectPath);
 	std::string command("cmake");
 	const char* assetsDirectoryName("assets");
-	command.append(" -S ").append(editorPath.string()).append(" -B ").append((projectPath / "build").string());
+	command.append(" -S \"").append(editorPath.string()).append("\"").append(" -B \"").append((projectPath / "build").string()).append("\"");
 	command.append(" -D MAIN_TARGET=DommusEditor");
 	command.append(" -D PROJECT_PATH_DEFINED=ON");
-	command.append(" -D PROJECT_PATH=").append(projectPath.string());
-	command.append(" -D EDITOR_PATH=").append(editorPath.string());
+	command.append(" -D PROJECT_PATH=\"").append(projectPath.string()).append("\"");
+	command.append(" -D EDITOR_PATH=\"").append(editorPath.string()).append("\"");
 	command.append(" -D CMAKE_BUILD_TYPE=NOT_DEFINED");
 	command.append(" -D CMAKE_VS_DEBUGGER_COMMAND_ARGUMENTS=\"").append((projectPath / assetsDirectoryName).string()).append(" ").append((editorPath / assetsDirectoryName).string()).append("\"");
-	command.append(" -D CMAKE_RUNTIME_OUTPUT_DIRECTORY=").append(runtimeOutputDirectory.string());
+	command.append(" -D CMAKE_RUNTIME_OUTPUT_DIRECTORY=\"").append(runtimeOutputDirectory.string()).append("\"");
 	int status(system(command.c_str()));
 	if (status != 0)
 	{
@@ -433,7 +462,7 @@ int main(void)
 #ifdef _WIN32
 	assert(SUCCEEDED(CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE)));
 #endif
-	YAML::Node infos(OpenInfosFile());
+	OpenInfosFile();
 	int option(0);
 	std::string selectedProject;
 	while (option != EXIT_OPTION)
@@ -442,6 +471,7 @@ int main(void)
 		std::cout << SET_EDITOR_PATH_OPTION << " - Set editor path." << std::endl;
 		std::cout << CREATE_PROJECT_OPTION << " - Create project." << std::endl;
 		std::cout << SELECT_PROJECT_OPTION << " - Select project." << std::endl;
+		std::cout << OPEN_PROJECT_OPTION << " - Open project." << std::endl;
 #ifdef __linux__
 		std::cout << BUILD_PROJECT_OPTION << " - Build project." << std::endl;
 #elif _WIN32
@@ -460,6 +490,9 @@ int main(void)
 			continue;
 		case SELECT_PROJECT_OPTION:
 			SelectProject(selectedProject);	
+			continue;
+		case OPEN_PROJECT_OPTION:
+			OpenProject();
 			continue;
 		case BUILD_PROJECT_OPTION:
 #ifdef __linux__
