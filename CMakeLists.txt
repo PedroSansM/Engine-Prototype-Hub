@@ -1,0 +1,14 @@
+cmake_minimum_required(VERSION 3.20)
+
+project(${MAIN_TARGET})
+ 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
+
+add_executable(${MAIN_TARGET} "")
+
+add_subdirectory(src)
+add_subdirectory(vendor/yaml-cpp)
+
+target_link_libraries(${MAIN_TARGET} PRIVATE yaml-cpp::yaml-cpp)
+
