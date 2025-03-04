@@ -1,3 +1,4 @@
-Infos.yaml
 build/
 .cache/
+
+Infos.yaml

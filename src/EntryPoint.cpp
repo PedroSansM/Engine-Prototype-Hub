@@ -460,7 +460,11 @@ void GenerateSolution(const std::string& selectedProject)
 int main(void)
 {
 #ifdef _WIN32
-	assert(SUCCEEDED(CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE)));
+	if (!SUCCEEDED(CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE)))
+	{
+		std::cout << "Fail to initialize COM" << std::endl;
+		return EXIT_FAILURE;
+	}
 #endif
 	OpenInfosFile();
 	int option(0);
