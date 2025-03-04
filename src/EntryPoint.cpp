@@ -350,10 +350,18 @@ void OpenProject()
 		return;
 	}
 	infos[PROJECTS].force_insert(projectName, projectPath);
-	std::ofstream stream(INFOS_FILE_NAME, std::ios_base::out, std::ios_base::trunc);
+	std::ofstream stream(INFOS_FILE_NAME, std::ios_base::out | std::ios_base::trunc);
 	assert(stream);
 	stream << infos;
 	assert(stream);
+	stream.close();
+	assert(stream);
+	std::filesystem::path editorAssetsPath(std::filesystem::path(infos[EDITOR_PATH].as<std::string>()) / "assets");
+	std::filesystem::path projectAssetsPath(std::filesystem::path(projectPath) / "assets");
+	stream.open(std::filesystem::path(projectPath) / "Run.py");
+	assert(stream);
+	stream << "import os\n\n\n";
+	stream << "os.system(\"" << "./DommusEditor " << projectAssetsPath.string() << " " << editorAssetsPath.string() << "\")";
 	stream.close();
 	assert(stream);
 }
